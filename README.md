@@ -1,6 +1,36 @@
 # Welcome to your Expo app 👋
 
+Bunk App is a smart attendance and academic tracker designed for students. It helps you monitor class attendance, manage bunks, receive timely notifications, and sync your academic schedule with Google Calendar. With PDF upload and LLM-powered extraction, you can easily import timetables and syllabi, track syllabus coverage, and get insights on your academic progress. Built with a modern mobile stack and a robust backend, Bunk App aims to simplify student life and boost productivity.
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+
+## Tech Stack
+
+This tech stack outlines the core technologies for building the Bunk App, which helps students track class attendance, bunks, and sync with calendars. LLMs (like Gemini) are used to extract structured data from PDF inputs (e.g., timetable, calendar).
+
+### Frontend (Mobile App)
+- **React Native (Expo)** – for cross-platform development
+- **React Navigation** – screen transitions and stack/tab navigation
+- **React Native Calendars** – display bunks on a calendar
+- **React Native Paper** – clean UI components
+
+### Backend
+- **FastAPI (Python)** – lightweight REST API server
+- **LlamaIndex** – index and query extracted PDF data
+- **Gemini API** – extract insights from PDFs (timetable, calendar)
+- **Google Calendar API** – create & sync events with user's calendar
+
+### Database & Storage
+- **Supabase** – for PostgreSQL DB, auth, and file storage
+- **Tables:** users, subjects, bunks, syllabus, notifications
+
+### Notifications
+- **Expo Notifications** – to alert before classes or exams
+- **Custom Logic** – detect critical attendance thresholds
+
+### Optional Features
+- **Syllabus Coverage Tracker** – match lecture topics with uploaded syllabus
+- **Progress Tracking** – estimate syllabus completion 15 days before exams
 
 ## Get started
 
