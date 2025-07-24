@@ -1,12 +1,13 @@
-# Welcome to your Expo app 👋
 
-Bunk App is a smart attendance and academic tracker designed for students. It helps you monitor class attendance, manage bunks, receive timely notifications, and sync your academic schedule with Google Calendar. With PDF upload and LLM-powered extraction, you can easily import timetables and syllabi, track syllabus coverage, and get insights on your academic progress. Built with a modern mobile stack and a robust backend, Bunk App aims to simplify student life and boost productivity.
+# BunkIt: Student Personalised App
+
+BunkIt is a smart attendance and academic tracker designed for students. It helps you monitor class attendance, manage bunks, receive timely notifications, and sync your academic schedule with Google Calendar. With PDF upload and LLM-powered extraction, you can easily import timetables and syllabi, track syllabus coverage, and get insights on your academic progress. Built with a modern mobile stack and a robust backend, BunkIt aims to simplify student life and boost productivity.
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Tech Stack
 
-This tech stack outlines the core technologies for building the Bunk App, which helps students track class attendance, bunks, and sync with calendars. LLMs (like Gemini) are used to extract structured data from PDF inputs (e.g., timetable, calendar).
+This tech stack outlines the core technologies for building BunkIt, which helps students track class attendance, bunks, and sync with calendars. LLMs (like Gemini) are used to extract structured data from PDF inputs (e.g., timetable, calendar).
 
 ### Frontend (Mobile App)
 - **React Native (Expo)** – for cross-platform development
