@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useFonts, Quicksand_400Regular } from '@expo-google-fonts/quicksand';
 import { View, Text, TextInput, Button, StyleSheet, ImageBackground } from 'react-native';
+import { useAuthStore } from '../store/authStore';
 import { BlurView } from 'expo-blur';
 import {  Nunito_400Regular } from '@expo-google-fonts/nunito';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -23,20 +24,24 @@ type Props = {
 };
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
-  const [name, setName] = useState('');
-  const [rollNo, setRollNo] = useState('');
+  const { name, rollNo, setName, setRollNo } = useAuthStore();
 
 
   useEffect(() => {
     const checkPDFs = async () => {
       const timetable = await AsyncStorage.getItem('timetablePDF');
       const calendar = await AsyncStorage.getItem('calendarPDF');
+      const storedName = await AsyncStorage.getItem('userName');
+      const storedRollNo = await AsyncStorage.getItem('userRollNo');
+      if (storedName) setName(storedName);
+      if (storedRollNo) setRollNo(storedRollNo);
       if (timetable && calendar) {
         navigation.replace('Home');
       }
     };
     checkPDFs();
-  }, [navigation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, setName, setRollNo]);
 
   const handleProceed = async () => {
     if (name && rollNo) {
@@ -67,12 +72,14 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             placeholder="Name"
             value={name}
             onChangeText={setName}
+            autoCapitalize="words"
           />
           <TextInput
             style={[styles.input, { fontFamily: 'Nunito_400Regular' }]}
             placeholder="Roll Number"
             value={rollNo}
             onChangeText={setRollNo}
+            autoCapitalize="characters"
           />
           <TouchableOpacity 
             style={[
