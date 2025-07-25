@@ -1,29 +1,134 @@
+// Common issues and solutions for PDF upload in React Native
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Alert,
-  TouchableOpacity,
-  ActivityIndicator,
-  ImageBackground,
-} from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { BlurView } from 'expo-blur';
+// 1. Missing getPDFName function - Add this helper function
+const getPDFName = (fileInfo) => {
+  return fileInfo?.name || fileInfo?.uri?.split('/').pop() || 'Unknown PDF';
+};
 
-// Use the same background image as LoginScreen
-const backgroundImage = require('../asset/loginbg.jpg');
+// 2. Enhanced error handling for pickSemesterPDF
+const pickSemesterPDF = async () => {
+  try {
+    console.log('Starting document picker...');
+    
+    let result = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: false,
+    });
 
-const BACKEND_URL = 'http://192.168.29.69:8081/api/extract-timetable'; // Change to your IP
+    console.log('Document picker result:', result);
 
+    // Check for different result formats (older vs newer expo-document-picker versions)
+    if (result.type === 'success' || (result.assets && result.assets.length > 0)) {
+      try {
+        // Handle different result formats
+        const fileData = result.assets ? result.assets[0] : result;
+        
+        console.log('File data:', fileData);
+
+        const fileName = `semester_${Date.now()}.pdf`;
+        const destPath = FileSystem.documentDirectory + fileName;
+        
+        console.log('Copying file from:', fileData.uri, 'to:', destPath);
+        
+        await FileSystem.copyAsync({ from: fileData.uri, to: destPath });
+
+        const fileInfo = {
+          ...fileData,
+          localUri: destPath,
+          name: fileData.name || fileName,
+        };
+
+        console.log('Final file info:', fileInfo);
+
+        setSemester(fileInfo);
+        await AsyncStorage.setItem('semesterPDF', JSON.stringify(fileInfo));
+        Alert.alert('Success', `Semester PDF "${fileInfo.name}" uploaded.`);
+      } catch (err) {
+        console.error('Error processing PDF:', err);
+        Alert.alert('Error', `Failed to process PDF: ${err.message}`);
+      }
+    } else if (result.type === 'cancel') {
+      console.log('User cancelled document picker');
+    } else {
+      console.log('Unknown result:', result);
+      Alert.alert('Error', 'No file selected or unknown error occurred');
+    }
+  } catch (err) {
+    console.error('Document picker error:', err);
+    Alert.alert('Error', `Failed to open document picker: ${err.message}`);
+  }
+};
+
+// 3. Check permissions (add to your component or separate permission handler)
+import * as MediaLibrary from 'expo-media-library';
+
+const checkPermissions = async () => {
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant storage permissions to upload files.');
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Permission error:', err);
+    return false;
+  }
+};
+
+// 4. Enhanced sendPDFToBackend with better error handling
+const sendPDFToBackend = async () => {
+  if (!semester) {
+    Alert.alert('Error', 'Please upload the Semester PDF.');
+    return;
+  }
+
+  // Check if file still exists
+  try {
+    const fileExists = await FileSystem.getInfoAsync(semester.localUri);
+    if (!fileExists.exists) {
+      Alert.alert('Error', 'PDF file not found. Please upload again.');
+      setSemester(null);
+      await AsyncStorage.removeItem('semesterPDF');
+      return;
+    }
+  } catch (err) {
+    console.error('File check error:', err);
+    Alert.alert('Error', 'Could not verify PDF file.');
+    return;
+  }
+
+  const prompt = `Extract a list of all subjects, the total number of classes for each subject, and the timing of each subject's class in a week from this semester PDF. This PDF has two parts: the timetable and the monthly calendar. Return the result as an array of objects: [{ subject, totalClasses, timings: [day, startTime, endTime] }]`;
+
+  setLoading(true);
+  try {
+    console.log('Sending PDF to backend:', semester.localUri);
+    const semData = await extractTimetableData(semester.localUri, prompt);
+    console.log('Semester data:', semData);
+    Alert.alert('Success', 'PDF processed and data extracted.');
+  } catch (err) {
+    console.error('Backend error:', err);
+    Alert.alert('Extraction Error', `Failed to extract data from PDF: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// 5. Enhanced extractTimetableData with better error handling
 const extractTimetableData = async (fileUri, prompt) => {
   try {
+    console.log('Extracting data from:', fileUri);
+    
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    console.log('File info:', fileInfo);
+    
+    if (!fileInfo.exists) {
+      throw new Error('File does not exist');
+    }
+
     const fileName = fileInfo.uri.split('/').pop();
     const formData = new FormData();
+    
     formData.append('file', {
       uri: fileUri,
       name: fileName,
@@ -31,13 +136,26 @@ const extractTimetableData = async (fileUri, prompt) => {
     });
     formData.append('prompt', prompt);
 
+    console.log('Sending request to:', BACKEND_URL);
+
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
       body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    if (!response.ok) throw new Error('Failed to extract timetable data');
+    console.log('Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Server error:', errorText);
+      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+    
     const data = await response.json();
+    console.log('Response data:', data);
     return data.data;
   } catch (err) {
     console.error('extractTimetableData error:', err);
@@ -45,186 +163,28 @@ const extractTimetableData = async (fileUri, prompt) => {
   }
 };
 
+// 6. Network connectivity check
+import NetInfo from '@react-native-community/netinfo';
 
-const UploadPDFScreen = () => {
-  const [semester, setSemester] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  // Load saved semester PDF on mount
-  useEffect(() => {
-    const loadSavedPDF = async () => {
-      const stored = await AsyncStorage.getItem('semesterPDF');
-      if (stored) {
-        setSemester(JSON.parse(stored));
-      }
-    };
-    loadSavedPDF();
-  }, []);
-
-  const pickSemesterPDF = async () => {
-    let result = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
-      copyToCacheDirectory: false,
-    });
-
-    if (result.type === 'success') {
-      try {
-        const fileName = `semester_${Date.now()}.pdf`;
-        const destPath = FileSystem.documentDirectory + fileName;
-        await FileSystem.copyAsync({ from: result.uri, to: destPath });
-
-        const fileInfo = {
-          ...result,
-          localUri: destPath,
-          name: result.name || fileName,
-        };
-
-        console.log('Picked file info:', fileInfo);
-
-        setSemester(fileInfo);
-        await AsyncStorage.setItem('semesterPDF', JSON.stringify(fileInfo));
-        Alert.alert('Success', `Semester PDF "${fileInfo.name}" uploaded.`);
-      } catch (err) {
-        console.error('Error handling PDF:', err);
-        Alert.alert('Error', 'Failed to process PDF.');
-      }
-    }
-  };
-
-  const sendPDFToBackend = async () => {
-    if (!semester) {
-      Alert.alert('Error', 'Please upload the Semester PDF.');
-      return;
-    }
-
-    const prompt = `Extract a list of all subjects, the total number of classes for each subject, and the timing of each subject's class in a week from this semester PDF. This PDF has two parts: the timetable and the monthly calendar. Return the result as an array of objects: [{ subject, totalClasses, timings: [day, startTime, endTime] }]`;
-
-    setLoading(true);
-    try {
-      const semData = await extractTimetableData(semester.localUri, prompt);
-      console.log('Semester data:', semData);
-      Alert.alert('Success', 'PDF processed and data extracted.');
-    } catch (err) {
-      Alert.alert('Extraction Error', 'Failed to extract data from PDF.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <ImageBackground source={backgroundImage} style={styles.background} resizeMode="cover">
-      <BlurView intensity={116} style={styles.blurContainer}>
-        <View style={styles.container}>
-          <Text style={styles.title}>Upload Semester PDF</Text>
-          <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={pickSemesterPDF}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.uploadButtonText}>Upload Semester PDF</Text>
-          </TouchableOpacity>
-          {semester && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Semester PDF</Text>
-              <Text style={styles.cardText}>
-                PDF Name: {getPDFName(semester)}
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.processButton,
-              { backgroundColor: semester ? '#007AFF' : '#d3d3d3', opacity: loading ? 0.7 : 1 },
-            ]}
-            onPress={sendPDFToBackend}
-            disabled={!semester || loading}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.processButtonText}>
-              {loading ? 'Processing...' : 'Process PDF'}
-            </Text>
-            {loading && <ActivityIndicator color="#fff" style={{ marginLeft: 10 }} />}
-          </TouchableOpacity>
-        </View>
-      </BlurView>
-    </ImageBackground>
-  );
+const checkNetworkConnection = async () => {
+  const netInfo = await NetInfo.fetch();
+  if (!netInfo.isConnected) {
+    Alert.alert('No Internet', 'Please check your internet connection and try again.');
+    return false;
+  }
+  return true;
 };
 
-
-const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  blurContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    width: '90%',
-    backgroundColor: 'rgba(253, 253, 253, 0.4)',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 120,
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 24,
-  },
-  uploadButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  uploadButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  card: {
-    width: '90%',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    padding: 16,
-    marginVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    alignItems: 'flex-start',
-  },
-  cardTitle: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  cardText: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginBottom: 8,
-  },
-  processButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  processButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-});
-
-export default UploadPDFScreen;
+// 7. Backend URL validation
+const testBackendConnection = async () => {
+  try {
+    const response = await fetch(BACKEND_URL.replace('/api/extract-timetable', '/health'), {
+      method: 'GET',
+      timeout: 5000,
+    });
+    return response.ok;
+  } catch (err) {
+    console.error('Backend connection test failed:', err);
+    return false;
+  }
+};
